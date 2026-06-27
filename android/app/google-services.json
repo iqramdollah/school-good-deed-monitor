@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "890120499254",
+    "project_id": "sriwaap-158cd",
+    "storage_bucket": "sriwaap-158cd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:890120499254:android:356cf7f034707ff747e897",
+        "android_client_info": {
+          "package_name": "com.example.sriwaap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-L186U_MJR7I-RcLIVkV6ip-F6RLuFDQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
