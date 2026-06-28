@@ -10,7 +10,7 @@ class LeaderboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedClass = ref.watch(selectedClassProvider);
-    final classesAsync = ref.watch(classesProvider);
+    final classes = ref.watch(classesProvider); // ← plain List now
     final leaderboardAsync = ref.watch(leaderboardProvider(selectedClass));
 
     return Column(
@@ -29,30 +29,25 @@ class LeaderboardScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
-              classesAsync.when(
-                loading: () => const SizedBox(),
-                error: (_, __) => const SizedBox(),
-                data: (classes) => SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _ClassChip(
-                        label: 'All Classes',
-                        selected: selectedClass.isEmpty,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _ClassChip(
+                      label: 'All Classes',
+                      selected: selectedClass.isEmpty,
+                      onTap: () =>
+                          ref.read(selectedClassProvider.notifier).state = '',
+                    ),
+                    ...classes.map(
+                      (c) => _ClassChip(
+                        label: c,
+                        selected: selectedClass == c,
                         onTap: () =>
-                            ref.read(selectedClassProvider.notifier).state = '',
+                            ref.read(selectedClassProvider.notifier).state = c,
                       ),
-                      ...classes.map(
-                        (c) => _ClassChip(
-                          label: c,
-                          selected: selectedClass == c,
-                          onTap: () =>
-                              ref.read(selectedClassProvider.notifier).state =
-                                  c,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],

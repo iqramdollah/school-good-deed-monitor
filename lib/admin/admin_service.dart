@@ -1,10 +1,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:sriwaap/firebase_options.dart';
 import 'package:sriwaap/user_model.dart';
 
 class AdminService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // Secondary app used to create accounts without logging out the admin
+  Future<FirebaseAuth> _secondaryAuth() async {
+    try {
+      final secondary = await Firebase.initializeApp(
+        name: 'secondary',
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      return FirebaseAuth.instanceFor(app: secondary);
+    } catch (e) {
+      // Already initialized — reuse it
+      return FirebaseAuth.instanceFor(app: Firebase.app('secondary'));
+    }
+  }
 
   // ─── Students ─────────────────────────────────────────────────────────────
 
@@ -19,18 +34,25 @@ class AdminService {
         );
   }
 
-  Future<void> addStudent(String name, String className) async {
+  Future<void> addStudent(String name, String ic, String className) async {
     await _db.collection('students').add({
       'name': name,
+      'ic': ic,
       'className': className,
       'totalPoints': 0,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> updateStudent(String id, String name, String className) async {
+  Future<void> updateStudent(
+    String id,
+    String name,
+    String ic,
+    String className,
+  ) async {
     await _db.collection('students').doc(id).update({
       'name': name,
+      'ic': ic,
       'className': className,
     });
   }
@@ -44,14 +66,14 @@ class AdminService {
     String email, {
     String password = '123456',
   }) async {
-    // Create Firebase Auth account
-    final credential = await _auth.createUserWithEmailAndPassword(
+    final auth = await _secondaryAuth();
+    final credential = await auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
     final uid = credential.user!.uid;
+    await auth.signOut(); // sign out of secondary only
 
-    // Write to users collection with student role
     await _db.collection('users').doc(uid).set({
       'name':
           (await _db.collection('students').doc(studentId).get())
@@ -59,9 +81,10 @@ class AdminService {
           '',
       'email': email,
       'role': UserRole.student.name,
-      'studentId': studentId, // link to student record
+      'studentId': studentId,
     });
   }
+
   // ─── Teachers ─────────────────────────────────────────────────────────────
 
   Stream<List<Teacher>> watchTeachers() {
@@ -79,15 +102,16 @@ class AdminService {
     String name,
     String email,
     String department, {
-    String password = '123456',
+    String password = 'Turquoise@2024',
   }) async {
-    final credential = await _auth.createUserWithEmailAndPassword(
+    final auth = await _secondaryAuth();
+    final credential = await auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
     final uid = credential.user!.uid;
+    await auth.signOut(); // sign out of secondary only
 
-    // Write to teachers collection
     await _db.collection('teachers').doc(uid).set({
       'name': name,
       'email': email,
@@ -95,7 +119,6 @@ class AdminService {
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    // Write to users collection for role-based auth
     await _db.collection('users').doc(uid).set({
       'name': name,
       'email': email,
@@ -114,15 +137,11 @@ class AdminService {
   Future<void> deleteTeacher(String id) async {
     await _db.collection('teachers').doc(id).delete();
     await _db.collection('users').doc(id).delete();
-    // Note: Firebase Auth account deletion requires Admin SDK on backend
-    // For now we just remove Firestore records
   }
 
   // ─── Annual Update ────────────────────────────────────────────────────────
-  // Promotes all students to the next class and resets points
 
   Future<int> runAnnualUpdate(Map<String, String> classPromotionMap) async {
-    // classPromotionMap: { 'Year 1': 'Year 2', 'Year 2': 'Year 3', ... }
     final batch = _db.batch();
     final students = await _db.collection('students').get();
     int count = 0;

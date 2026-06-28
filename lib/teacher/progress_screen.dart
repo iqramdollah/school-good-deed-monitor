@@ -1,11 +1,145 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sriwaap/app_theme.dart';
+import 'package:sriwaap/auth_provider.dart';
 import 'package:sriwaap/teacher/teacher_model.dart';
 import 'package:sriwaap/teacher/teacher_provider.dart';
+import 'package:sriwaap/user_model.dart';
 
 class ProgressScreen extends ConsumerWidget {
   const ProgressScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authNotifierProvider).value;
+    final isManagement = user?.role == UserRole.management;
+
+    // Management sees a teacher picker + that teacher's progress
+    // Teacher sees their own progress
+    if (isManagement) {
+      return const _ManagementProgressView();
+    }
+    return const _MyProgressView();
+  }
+}
+
+// ─── Management view: pick a teacher, see their progress ─────────────────────
+
+class _ManagementProgressView extends ConsumerWidget {
+  const _ManagementProgressView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final year = ref.watch(selectedYearProvider);
+    final teachersAsync = ref.watch(teachersListProvider);
+    final selectedId = ref.watch(selectedTeacherIdProvider);
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.divider)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Teacher Progress',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        Text(
+                          'View monthly self-evaluation scores for $year.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  _YearSelector(year: year),
+                ],
+              ),
+              const SizedBox(height: 14),
+              teachersAsync.when(
+                loading: () => const LinearProgressIndicator(),
+                error: (e, _) => Text('Error: $e'),
+                data: (teachers) => DropdownButtonFormField<String>(
+                  value: selectedId.isEmpty ? null : selectedId,
+                  decoration: const InputDecoration(
+                    labelText: 'Select Teacher',
+                    isDense: true,
+                    prefixIcon: Icon(Icons.person_outlined),
+                  ),
+                  hint: const Text('Choose a teacher to view progress'),
+                  items: teachers
+                      .map(
+                        (t) => DropdownMenuItem(
+                          value: t['id'],
+                          child: Text(
+                            '${t['name']}${t['department']!.isNotEmpty ? ' • ${t['department']}' : ''}',
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (id) {
+                    if (id != null) {
+                      ref.read(selectedTeacherIdProvider.notifier).state = id;
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: selectedId.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.person_search_outlined,
+                        size: 56,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Select a teacher above to view their progress.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                )
+              : _ProgressContent(
+                  progressAsync: ref.watch(
+                    teacherProgressProvider((
+                      teacherId: selectedId,
+                      year: year,
+                    )),
+                  ),
+                  evalsAsync: ref.watch(
+                    teacherSelfEvalsProvider((
+                      teacherId: selectedId,
+                      year: year,
+                    )),
+                  ),
+                  year: year,
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Teacher's own progress view ─────────────────────────────────────────────
+
+class _MyProgressView extends ConsumerWidget {
+  const _MyProgressView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -15,7 +149,6 @@ class ProgressScreen extends ConsumerWidget {
 
     return Column(
       children: [
-        // Header
         Container(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
           decoration: const BoxDecoration(
@@ -42,49 +175,63 @@ class ProgressScreen extends ConsumerWidget {
             ],
           ),
         ),
-
-        // Chart + breakdown
         Expanded(
-          child: progressAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
-            data: (monthlyScores) {
-              if (monthlyScores.isEmpty) {
-                return _NoData(year: year);
-              }
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Bar chart
-                    _BarChart(monthlyScores: monthlyScores, year: year),
-                    const SizedBox(height: 24),
-
-                    // Stats
-                    _StatsRow(monthlyScores: monthlyScores),
-                    const SizedBox(height: 24),
-
-                    // Monthly breakdown
-                    Text(
-                      'Monthly Breakdown',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    evalsAsync.when(
-                      loading: () => const SizedBox(),
-                      error: (_, __) => const SizedBox(),
-                      data: (evals) => Column(
-                        children: evals.map((e) => _EvalRow(eval: e)).toList(),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+          child: _ProgressContent(
+            progressAsync: progressAsync,
+            evalsAsync: evalsAsync,
+            year: year,
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─── Shared progress content ──────────────────────────────────────────────────
+
+class _ProgressContent extends StatelessWidget {
+  final AsyncValue<Map<int, double>> progressAsync;
+  final AsyncValue<List<SelfEvaluation>> evalsAsync;
+  final int year;
+
+  const _ProgressContent({
+    required this.progressAsync,
+    required this.evalsAsync,
+    required this.year,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return progressAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (monthlyScores) {
+        if (monthlyScores.isEmpty) return _NoData(year: year);
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _BarChart(monthlyScores: monthlyScores, year: year),
+              const SizedBox(height: 24),
+              _StatsRow(monthlyScores: monthlyScores),
+              const SizedBox(height: 24),
+              Text(
+                'Monthly Breakdown',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              evalsAsync.when(
+                loading: () => const SizedBox(),
+                error: (_, __) => const SizedBox(),
+                data: (evals) => Column(
+                  children: evals.map((e) => _EvalRow(eval: e)).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -115,13 +262,13 @@ class _BarChart extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 140,
+            height: 160,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: List.generate(12, (i) {
                 final month = i + 1;
                 final score = monthlyScores[month];
-                final barHeight = score != null ? (score / 5) * 120 : 0.0;
+                final barHeight = score != null ? (score / 5) * 100 : 0.0;
                 final hasScore = score != null;
 
                 return Expanded(
@@ -133,7 +280,7 @@ class _BarChart extends StatelessWidget {
                         if (hasScore)
                           Text(
                             score.toStringAsFixed(1),
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
                               color: AppColors.teacherColor,
@@ -350,7 +497,11 @@ class _NoData extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.bar_chart_outlined, size: 56, color: AppColors.textMuted),
+          const Icon(
+            Icons.bar_chart_outlined,
+            size: 56,
+            color: AppColors.textMuted,
+          ),
           const SizedBox(height: 12),
           Text(
             'No evaluations submitted for $year.',
@@ -360,7 +511,7 @@ class _NoData extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Complete monthly self-evaluations to see your progress here.',
+            'Monthly self-evaluations will appear here once submitted.',
             style: Theme.of(context).textTheme.bodyMedium,
             textAlign: TextAlign.center,
           ),

@@ -398,6 +398,7 @@ class _StudentDialog extends ConsumerStatefulWidget {
 
 class _StudentDialogState extends ConsumerState<_StudentDialog> {
   late final TextEditingController _name;
+  late final TextEditingController _ic;
   String? _selectedClass;
   bool _loading = false;
 
@@ -405,27 +406,35 @@ class _StudentDialogState extends ConsumerState<_StudentDialog> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.existing?.name ?? '');
+    _ic = TextEditingController(text: widget.existing?.ic ?? '');
     _selectedClass = widget.existing?.className;
   }
 
   @override
   void dispose() {
     _name.dispose();
+    _ic.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (_name.text.isEmpty || _selectedClass == null) return;
+    if (_name.text.isEmpty || _ic.text.isEmpty || _selectedClass == null)
+      return;
     setState(() => _loading = true);
     final service = ref.read(adminServiceProvider);
     if (widget.existing != null) {
       await service.updateStudent(
         widget.existing!.id,
         _name.text.trim(),
+        _ic.text.trim(),
         _selectedClass!,
       );
     } else {
-      await service.addStudent(_name.text.trim(), _selectedClass!);
+      await service.addStudent(
+        _name.text.trim(),
+        _ic.text.trim(),
+        _selectedClass!,
+      );
     }
     if (mounted) Navigator.pop(context);
   }
@@ -511,6 +520,17 @@ class _StudentDialogState extends ConsumerState<_StudentDialog> {
               labelText: 'Full name',
               prefixIcon: Icon(Icons.person_outline),
             ),
+          ),
+          const SizedBox(height: 12),
+          // ← add this block
+          TextField(
+            controller: _ic,
+            decoration: const InputDecoration(
+              labelText: 'IC Number',
+              prefixIcon: Icon(Icons.badge_outlined),
+              hintText: 'e.g. 001234-56-7890',
+            ),
+            keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(

@@ -70,6 +70,7 @@ class AnnualGoal {
   final EvalCategory category;
   final String goalText;
   final DateTime createdAt;
+  final bool isCompleted;
 
   const AnnualGoal({
     required this.id,
@@ -78,6 +79,7 @@ class AnnualGoal {
     required this.category,
     required this.goalText,
     required this.createdAt,
+    this.isCompleted = false,
   });
 
   factory AnnualGoal.fromFirestore(Map<String, dynamic> data, String id) {
@@ -91,6 +93,7 @@ class AnnualGoal {
       ),
       goalText: data['goalText'] ?? '',
       createdAt: (data['createdAt'] as dynamic)?.toDate() ?? DateTime.now(),
+      isCompleted: data['isCompleted'] ?? false,
     );
   }
 
@@ -100,6 +103,7 @@ class AnnualGoal {
     'category': category.firestoreKey,
     'goalText': goalText,
     'createdAt': createdAt,
+    'isCompleted': isCompleted,
   };
 }
 

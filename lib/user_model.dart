@@ -5,12 +5,14 @@ enum UserRole { student, teacher, admin, management }
 class Student {
   final String id;
   final String name;
+  final String ic; // ← add
   final String className;
   final int totalPoints;
 
   const Student({
     required this.id,
     required this.name,
+    required this.ic, // ← add
     required this.className,
     required this.totalPoints,
   });
@@ -19,6 +21,7 @@ class Student {
     return Student(
       id: id,
       name: data['name'] ?? '',
+      ic: data['ic'] ?? '', // ← add
       className: data['className'] ?? '',
       totalPoints: (data['totalPoints'] as num?)?.toInt() ?? 0,
     );
@@ -26,6 +29,7 @@ class Student {
 
   Map<String, dynamic> toFirestore() => {
     'name': name,
+    'ic': ic, // ← add
     'className': className,
     'totalPoints': totalPoints,
   };

@@ -31,7 +31,6 @@ final selfEvalsProvider = StreamProvider.family<List<SelfEvaluation>, int>((
   return ref.watch(teacherServiceProvider).watchSelfEvals(year);
 });
 
-// Fetch a single month's self-eval (for pre-filling edit form)
 final selfEvalForMonthProvider =
     FutureProvider.family<SelfEvaluation?, ({int year, int month})>((
       ref,
@@ -42,13 +41,13 @@ final selfEvalForMonthProvider =
           .getSelfEvalForMonth(args.year, args.month);
     });
 
-// ─── Teachers list (for management) ──────────────────────────────────────────
+// ─── Teachers list (for management) — StreamProvider so it stays live ─────────
 
-final teachersListProvider = FutureProvider<List<Map<String, String>>>((ref) {
-  return ref.watch(teacherServiceProvider).getTeachersList();
+final teachersListProvider = StreamProvider<List<Map<String, String>>>((ref) {
+  return ref.watch(teacherServiceProvider).watchTeachersList();
 });
 
-// Selected teacher ID (used in management evaluation flow)
+// Selected teacher ID (reset to '' when switching screens)
 final selectedTeacherIdProvider = StateProvider<String>((ref) => '');
 
 // ─── Teacher Evaluations (by management) ─────────────────────────────────────
@@ -71,3 +70,24 @@ final selfEvalProgressProvider = FutureProvider.family<Map<int, double>, int>((
 ) {
   return ref.watch(teacherServiceProvider).getSelfEvalProgress(year);
 });
+
+// ─── Management: progress for a specific teacher ──────────────────────────────
+
+final teacherProgressProvider =
+    FutureProvider.family<Map<int, double>, ({String teacherId, int year})>((
+      ref,
+      args,
+    ) {
+      return ref
+          .watch(teacherServiceProvider)
+          .getTeacherProgress(args.teacherId, args.year);
+    });
+
+final teacherSelfEvalsProvider =
+    StreamProvider.family<List<SelfEvaluation>, ({String teacherId, int year})>(
+      (ref, args) {
+        return ref
+            .watch(teacherServiceProvider)
+            .watchTeacherSelfEvals(args.teacherId, args.year);
+      },
+    );

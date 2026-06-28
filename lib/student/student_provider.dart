@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:sriwaap/constant.dart';
+
 import 'package:sriwaap/student/student_service.dart';
 import 'package:sriwaap/user_model.dart';
 
@@ -10,10 +12,8 @@ final studentServiceProvider = Provider<StudentService>(
 // Selected class filter for leaderboard
 final selectedClassProvider = StateProvider<String>((ref) => '');
 
-// Available classes list
-final classesProvider = FutureProvider<List<String>>((ref) {
-  return ref.watch(studentServiceProvider).getClasses();
-});
+// Use kClasses from constants — no Firestore read needed
+final classesProvider = Provider<List<String>>((ref) => kClasses);
 
 // Live leaderboard stream
 final leaderboardProvider = StreamProvider.family<List<Student>, String>(
@@ -23,8 +23,8 @@ final leaderboardProvider = StreamProvider.family<List<Student>, String>(
 
 // Class summary (top3/bottom3 per class)
 final classSummaryProvider =
-    FutureProvider<Map<String, Map<String, List<Student>>>>((ref) {
-      return ref.watch(studentServiceProvider).getClassSummary();
+    StreamProvider<Map<String, Map<String, List<Student>>>>((ref) {
+      return ref.watch(studentServiceProvider).watchClassSummary();
     });
 
 // Students by class (for deed reporting)

@@ -68,20 +68,70 @@ class AnnualGoalsScreen extends ConsumerWidget {
                   onAdd: () => _showGoalDialog(context, ref, year: year),
                 );
               }
-              return ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: goals.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, i) => _GoalCard(
-                  goal: goals[i],
-                  onEdit: () => _showGoalDialog(
-                    context,
-                    ref,
-                    year: year,
-                    existing: goals[i],
+
+              final completed = goals.where((g) => g.isCompleted).length;
+
+              return Column(
+                children: [
+                  // Progress bar
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Goals Progress',
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                            Text(
+                              '$completed / ${goals.length} completed',
+                              style: TextStyle(
+                                color: AppColors.teacherColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: goals.isEmpty ? 0 : completed / goals.length,
+                            minHeight: 8,
+                            backgroundColor: AppColors.divider,
+                            valueColor: AlwaysStoppedAnimation(
+                              AppColors.teacherColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  onDelete: () => _confirmDelete(context, ref, goals[i]),
-                ),
+
+                  // List
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: goals.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, i) => _GoalCard(
+                        goal: goals[i],
+                        ref: ref,
+                        onEdit: () => _showGoalDialog(
+                          context,
+                          ref,
+                          year: year,
+                          existing: goals[i],
+                        ),
+                        onDelete: () => _confirmDelete(context, ref, goals[i]),
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
           ),
@@ -131,11 +181,13 @@ class _GoalCard extends StatelessWidget {
   final AnnualGoal goal;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final WidgetRef ref;
 
   const _GoalCard({
     required this.goal,
     required this.onEdit,
     required this.onDelete,
+    required this.ref,
   });
 
   @override
@@ -143,29 +195,35 @@ class _GoalCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: goal.isCompleted ? Colors.green.shade50 : AppColors.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
+        border: Border.all(
+          color: goal.isCompleted ? Colors.green.shade200 : AppColors.divider,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.teacherColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: Text(
-                '${goal.category.weightPercent}%',
-                style: TextStyle(
-                  color: AppColors.teacherColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
+          // Checkbox
+          GestureDetector(
+            onTap: () => ref
+                .read(teacherServiceProvider)
+                .toggleGoal(goal.id, !goal.isCompleted),
+            child: Container(
+              width: 24,
+              height: 24,
+              margin: const EdgeInsets.only(top: 2),
+              decoration: BoxDecoration(
+                color: goal.isCompleted ? Colors.green : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: goal.isCompleted ? Colors.green : AppColors.divider,
+                  width: 2,
                 ),
               ),
+              child: goal.isCompleted
+                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  : null,
             ),
           ),
           const SizedBox(width: 12),
@@ -173,29 +231,57 @@ class _GoalCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  goal.category.label,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.teacherColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${goal.category.weightPercent}% — ${goal.category.label}',
+                    style: TextStyle(
+                      color: AppColors.teacherColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   goal.goalText,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    decoration: goal.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                    color: goal.isCompleted
+                        ? AppColors.textMuted
+                        : AppColors.textPrimary,
+                  ),
                 ),
+                if (goal.isCompleted) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '✓ Completed',
+                    style: TextStyle(
+                      color: Colors.green.shade600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18),
             onPressed: onEdit,
-            tooltip: 'Edit',
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
             onPressed: onDelete,
-            tooltip: 'Delete',
           ),
         ],
       ),
@@ -214,7 +300,7 @@ class _EmptyGoals extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.flag_outlined, size: 56, color: AppColors.textMuted),
+          const Icon(Icons.flag_outlined, size: 56, color: AppColors.textMuted),
           const SizedBox(height: 12),
           Text(
             'No goals set for $year yet.',

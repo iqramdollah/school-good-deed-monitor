@@ -21,17 +21,6 @@ class StudentService {
         );
   }
 
-  Future<List<String>> getClasses() async {
-    final snap = await _db.collection('students').get();
-    final classes =
-        snap.docs
-            .map((d) => d.data()['className'] as String? ?? '')
-            .toSet()
-            .toList()
-          ..sort();
-    return classes;
-  }
-
   // ─── Good Deeds ───────────────────────────────────────────────────────────
 
   Future<void> reportGoodDeed({
@@ -42,7 +31,6 @@ class StudentService {
     final uid = _auth.currentUser?.uid ?? '';
     final batch = _db.batch();
 
-    // Write good deed record
     final deedRef = _db.collection('good_deeds').doc();
     batch.set(deedRef, {
       'studentId': student.id,
@@ -56,7 +44,6 @@ class StudentService {
       'reportedBy': uid,
     });
 
-    // Increment student total points
     final studentRef = _db.collection('students').doc(student.id);
     batch.update(studentRef, {
       'totalPoints': FieldValue.increment(category.points),
@@ -66,48 +53,50 @@ class StudentService {
   }
 
   // ─── Leaderboard ──────────────────────────────────────────────────────────
+  // Fetch all students sorted by points, filter in-memory to avoid
+  // needing a Firestore composite index on className + totalPoints
 
   Stream<List<Student>> watchLeaderboard({String? className}) {
-    Query<Map<String, dynamic>> query = _db
-        .collection('students')
-        .orderBy('totalPoints', descending: true);
-
-    if (className != null && className.isNotEmpty) {
-      query = query.where('className', isEqualTo: className);
-    }
-
-    return query.snapshots().map(
-      (s) => s.docs.map((d) => Student.fromFirestore(d.data(), d.id)).toList(),
-    );
-  }
-
-  // ─── Class Summary ────────────────────────────────────────────────────────
-
-  Future<Map<String, Map<String, List<Student>>>> getClassSummary() async {
-    final snap = await _db
+    return _db
         .collection('students')
         .orderBy('totalPoints', descending: true)
-        .get();
+        .snapshots()
+        .map((s) {
+          final all = s.docs
+              .map((d) => Student.fromFirestore(d.data(), d.id))
+              .toList();
+          if (className == null || className.isEmpty) return all;
+          return all.where((s) => s.className == className).toList();
+        });
+  }
 
-    final all = snap.docs
-        .map((d) => Student.fromFirestore(d.data(), d.id))
-        .toList();
+  // ─── Class Summary (live stream) ──────────────────────────────────────────
 
-    // Group by class
-    final Map<String, List<Student>> byClass = {};
-    for (final s in all) {
-      byClass.putIfAbsent(s.className, () => []).add(s);
-    }
+  Stream<Map<String, Map<String, List<Student>>>> watchClassSummary() {
+    return _db
+        .collection('students')
+        .orderBy('totalPoints', descending: true)
+        .snapshots()
+        .map((s) {
+          final all = s.docs
+              .map((d) => Student.fromFirestore(d.data(), d.id))
+              .toList();
 
-    // Build top3 / bottom3 per class
-    final Map<String, Map<String, List<Student>>> result = {};
-    byClass.forEach((className, students) {
-      result[className] = {
-        'top': students.take(3).toList(),
-        'bottom': students.reversed.take(3).toList(),
-      };
-    });
+          final Map<String, List<Student>> byClass = {};
+          for (final student in all) {
+            byClass.putIfAbsent(student.className, () => []).add(student);
+          }
 
-    return result;
+          final Map<String, Map<String, List<Student>>> result = {};
+          byClass.forEach((className, students) {
+            // already sorted descending by totalPoints from Firestore
+            result[className] = {
+              'top': students.take(3).toList(),
+              'bottom': students.reversed.take(3).toList(),
+            };
+          });
+
+          return result;
+        });
   }
 }

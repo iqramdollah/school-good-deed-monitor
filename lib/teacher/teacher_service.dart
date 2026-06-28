@@ -110,32 +110,56 @@ class TeacherService {
   // ─── Teacher Evaluations (by Management) ─────────────────────────────────
 
   /// Fetches all teachers — used by management to pick who to evaluate
-  Future<List<Map<String, String>>> getTeachersList() async {
-    final snap = await _db.collection('teachers').orderBy('name').get();
-    return snap.docs
+  Stream<List<Map<String, String>>> watchTeachersList() {
+    return _db
+        .collection('teachers')
+        .orderBy('name')
+        .snapshots()
         .map(
-          (d) => {
-            'id': d.id,
-            'name': (d.data()['name'] as String?) ?? '',
-            'department': (d.data()['department'] as String?) ?? '',
-          },
-        )
-        .toList();
+          (s) => s.docs
+              .map(
+                (d) => {
+                  'id': d.id,
+                  'name': (d.data()['name'] as String?) ?? '',
+                  'department': (d.data()['department'] as String?) ?? '',
+                },
+              )
+              .toList(),
+        );
   }
 
-  Stream<List<TeacherEvaluation>> watchTeacherEvals({
-    required String teacherId,
-    required int year,
-  }) {
+  Future<Map<int, double>> getTeacherProgress(
+    String teacherId,
+    int year,
+  ) async {
+    final snap = await _db
+        .collection('self_evaluations')
+        .where('teacherId', isEqualTo: teacherId)
+        .where('year', isEqualTo: year)
+        .get();
+
+    return {
+      for (final doc in snap.docs)
+        SelfEvaluation.fromFirestore(doc.data(), doc.id).month:
+            SelfEvaluation.fromFirestore(doc.data(), doc.id).averageScore,
+    };
+  }
+
+  Stream<List<SelfEvaluation>> watchTeacherSelfEvals(
+    String teacherId,
+    int year,
+  ) {
     return _db
-        .collection('teacher_evaluations')
+        .collection('self_evaluations')
         .where('teacherId', isEqualTo: teacherId)
         .where('year', isEqualTo: year)
         .snapshots()
         .map(
-          (s) => s.docs
-              .map((d) => TeacherEvaluation.fromFirestore(d.data(), d.id))
-              .toList(),
+          (s) =>
+              s.docs
+                  .map((d) => SelfEvaluation.fromFirestore(d.data(), d.id))
+                  .toList()
+                ..sort((a, b) => a.month.compareTo(b.month)),
         );
   }
 
@@ -217,5 +241,11 @@ class TeacherService {
         SelfEvaluation.fromFirestore(doc.data(), doc.id).month:
             SelfEvaluation.fromFirestore(doc.data(), doc.id).averageScore,
     };
+  }
+
+  Future<void> toggleGoal(String id, bool completed) async {
+    await _db.collection('annual_goals').doc(id).update({
+      'isCompleted': completed,
+    });
   }
 }
